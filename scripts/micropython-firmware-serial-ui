@@ -1,0 +1,57 @@
+import signal
+import sys
+from PyQt5 import QtWidgets
+from PyQt5.uic import loadUi
+
+from micropython_firmware_serial import serial_interface_qobject
+
+class ScopieWidget(QtWidgets.QWidget):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        loadUi("scopie_widget.ui", self)
+
+        self.serial = serial_interface_qobject.SerialInterface("/dev/ttyUSB0")
+        self.serial.messageChanged.connect(self.onMessageChanged)
+        self.serial.reset()
+        
+        self.lightCheckBox.toggled.connect(self.lightCheckBoxToggled)
+        self.frequencySpinBox.valueChanged.connect(self.frequencySpinBoxValueChanged)
+        self.dutySpinBox.valueChanged.connect(self.dutySpinBoxValueChanged)
+
+    def lightCheckBoxToggled(self, value):
+        self.serial.write("L %d\r" % int(value))
+
+    def frequencySpinBoxValueChanged(self, value):
+        self.serial.write("P %d %d\r" % (int(value), int(self.dutySpinBox.value())))
+
+    def dutySpinBoxValueChanged(self, value):
+        self.serial.write("P %d %d\r" % (int(self.frequencySpinBox.value()), int(value)))
+
+    def onMessageChanged(self, message):
+        sys.stdout.write(message)
+
+
+    
+
+class MainWindow(QtWidgets.QMainWindow):
+    
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.widget = ScopieWidget()
+        loadUi("scopie_widget.ui", self.widget)
+        self.setCentralWidget(self.widget)
+
+
+class QApplication(QtWidgets.QApplication):
+    def __init__(self, *args, **kwargs):
+        super(QApplication, self).__init__(*args, **kwargs)
+
+        self.main_window = MainWindow()
+        self.main_window.show()
+
+if __name__ == '__main__':
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    app = QApplication(sys.argv)
+    app.exec_()
+
