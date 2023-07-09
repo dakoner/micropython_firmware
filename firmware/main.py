@@ -5,32 +5,45 @@ import esp32
 from machine import Pin, PWM
 from machine import Timer
 
-TRIGGER_PIN=12
-STROBE_PIN=14
-LED_PIN=2
-
+TRIGGER_PIN=21
+STROBE_PIN=22
+LED_PIN=23
 class Program():
     def __init__(self):
         self.pwm = None
+        self.rmt = None
 
-        # Camera trigger
-        self.trigger = Pin(TRIGGER_PIN, Pin.OUT)
+        # # Camera trigger
+        self.trigger = Pin(TRIGGER_PIN, Pin.OUT, Pin.PULL_DOWN)
         self.trigger.off()
 
         # Camera strobe
-        self.strobe = Pin(STROBE_PIN, Pin.IN, Pin.PULL_DOWN)
-        self.strobe.irq(trigger=Pin.IRQ_RISING, handler=self.handle_interrupt)
+        self.strobe = Pin(STROBE_PIN, Pin.IN)
+        self.strobe.irq(trigger=Pin.IRQ_RISING|Pin.IRQ_FALLING, handler=self.handle)
 
 
+        #self.tim0 = Timer(0)
+        #self.tim0.init(period=5000, mode=Timer.ONE_SHOT, callback=lambda t:print(0))
         self.led = Pin(LED_PIN)
+        self.led.init(mode=Pin.OUT)
 
-    def handle_interrupt(self, pin):
-        print('strobe')
-        self.led.on()
-        utime.sleep_us(100)
+    def cb(self, timer):
         self.led.off()
 
-        #self.rmt.write_pulses((10, 10), 1)  # Send HIGH for 32767 * 100ns = 3ms
+    def handle(self, pin):
+        #if pin.value():
+        #    #self.led.off()
+        #    print("rising")
+        #else:
+        #    #self.led.on()
+        #    print("falling")
+        #self.tim0.init(period=1000, mode=Timer.ONE_SHOT, callback=self.cb)
+        if not pin.value():
+            self.rmt = esp32.RMT(0, pin=self.led, clock_div=64) # 1 time unit = 3 us
+            self.rmt.write_pulses((32767,), 1)  # Send HIGH for 32767 * 100ns = 3ms
+        else:
+            self.rmt.deinit()
+
 
     def loop(self):
         while True:
@@ -48,10 +61,15 @@ class Program():
                         print("led off")
                         self.led.off()
                 elif line.startswith('Q'):
-                    rmt = esp32.RMT(0, pin=Pin(LED_PIN), clock_div=255) # 1 time unit = 3 us
-                    rmt.write_pulses((32767, 32767, 32767, 32767), 1)
+                    rmt = esp32.RMT(0, pin=Pin(LED_PIN), clock_div=1) # 1 time unit = 3 us
+                    rmt.write_pulses((10,), 1)
                     rmt.wait_done()
                     rmt.deinit()
+                elif line.startswith('D'):
+                    dac = DAC(Pin(25))
+                    s = line.split(' ')
+                    v = int(s[1])
+                    dac.write(v)
                 elif line.startswith('P'):
                     s = line.split(' ')
                     freq = int(s[1])
@@ -92,4 +110,5 @@ class Program():
                 print(str(e))
 
 p = Program()
+print("b")
 p.loop()
